@@ -6,36 +6,24 @@ import (
 )
 
 func main() {
-	fmt.Println("Os page size:", os.Getpagesize())
-	dal, err := newDal("minerva.db")
-	if err != nil {
-		fmt.Printf("error creating database access layer: %s", err)
+	options := &Options{
+		pageSize:       os.Getpagesize(),
+		MinFillPercent: 0.0125,
+		MaxFillPercent: 0.025,
 	}
-	fmt.Println("Database created.")
-	newPage := dal.allocateEmptyPage()
-	newPage.number = dal.getNextPage()
-	copy(newPage.data, "hello from minerva db")
+	dal, _ := newDal("./min.db", options)
 
-	if err := dal.writePage(newPage); err != nil {
-		fmt.Printf("error when writing page: %s", err)
-	}
-	if _,err:=dal.writeFreeList(); err != nil {
-		fmt.Printf("error when writing freelist: %s", err)
-	}
-	fmt.Println("free list written successfully!")
+	c := NewCollection([]byte("collection1"), dal.root)
+	c.dal = dal
 
-	if err:=dal.close(); err != nil {
-		fmt.Printf("error when writing freelist: %s", err)
-	}
-	fmt.Println("database closed.")
+	_ = c.Put([]byte("Key1"), []byte("Value1"))
+	_ = c.Put([]byte("Key2"), []byte("Value2"))
+	_ = c.Put([]byte("Key3"), []byte("Value3"))
+	_ = c.Put([]byte("Key4"), []byte("Value4"))
+	_ = c.Put([]byte("Key5"), []byte("Value5"))
+	_ = c.Put([]byte("Key6"), []byte("Value6"))
+	item, _ := c.Find([]byte("Key1"))
 
-	dal, _= newDal("minerva.db")
-	newPage = dal.allocateEmptyPage()
-	newPage.number = dal.getNextPage()
-	copy(newPage.data, "The owl of Minerva spreads its wings only with the falling of the dusk.")
-	err = dal.writePage(newPage)
-	pageNumber := dal.getNextPage()
-	dal.releasePage(pageNumber)
-	_, _ = dal.writeFreeList()
-
+	fmt.Printf("key is: %s, value is: %s\n", item.key, item.value)
+	_ = dal.close()
 }
