@@ -267,3 +267,131 @@ func (n *Node) split(nodeToSplit *Node, nodeToSplitIndex int) {
 
 	n.writeNodes(n, nodeToSplit)
 }
+
+
+func (n *Node) removeItemFromLeaf(index int) {
+	n.items = append(n.items[:index], n.items[index+1:]...)
+	n.writeNode(n)
+}
+
+func (n *Node) removeItemFromInternal(index int) ([]int, error) {
+		affectedNodes := make([]int, 0)
+	affectedNodes = append(affectedNodes, index)
+	aNode, err := n.getNode(n.childNodes[index])
+	if err != nil {
+		return nil, err
+	}
+
+	for !aNode.isLeaf() {
+		traversingIndex := len(n.childNodes) - 1
+		aNode, err = n.getNode(n.childNodes[traversingIndex])
+		if err != nil {
+			return nil, err
+		}
+		affectedNodes = append(affectedNodes, traversingIndex)
+	}
+	n.items[index] = aNode.items[len(aNode.items)-1]
+	aNode.items = aNode.items[:len(aNode.items)-1]
+	n.writeNodes(n, aNode)
+	return affectedNodes, nil
+}
+
+
+func rotateRight(aNode, pNode, bNode *Node, bNodeIndex int) {
+	aNodeItem := aNode.items[len(aNode.items)-1]
+	aNode.items = aNode.items[:len(aNode.items)-1]
+
+	pNodeItemIndex := bNodeIndex - 1
+	if isFirst(bNodeIndex) {
+		pNodeItemIndex = 0
+	}
+	pNodeItem := pNode.items[pNodeItemIndex]
+	pNode.items[pNodeItemIndex] = aNodeItem
+
+	bNode.items = append([]*Item{pNodeItem}, bNode.items...)
+
+	if !aNode.isLeaf() {
+		childNodeToShift := aNode.childNodes[len(aNode.childNodes)-1]
+		aNode.childNodes = aNode.childNodes[:len(aNode.childNodes)-1]
+		bNode.childNodes = append([]pageNumber{childNodeToShift}, bNode.childNodes...)
+	}
+}
+
+func rotateLeft(aNode, pNode, bNode *Node, bNodeIndex int) {
+	bNodeItem := bNode.items[0]
+	bNode.items = bNode.items[1:]
+
+	pNodeItemIndex := bNodeIndex
+	if isLast(bNodeIndex, pNode) {
+		pNodeItemIndex = len(pNode.items) - 1
+	}
+	pNodeItem := pNode.items[pNodeItemIndex]
+	pNode.items[pNodeItemIndex] = bNodeItem
+
+	aNode.items = append(aNode.items, pNodeItem)
+
+	if !bNode.isLeaf() {
+		childNodeToShift := bNode.childNodes[0]
+		bNode.childNodes = bNode.childNodes[1:]
+		aNode.childNodes = append(aNode.childNodes, childNodeToShift)
+	}
+}
+
+func (n *Node) merge(bNode *Node, bNodeIndex int) error {
+	aNode, err := n.getNode(n.childNodes[bNodeIndex-1])
+	if err != nil {
+		return err
+	}
+
+	pNodeItem := n.items[bNodeIndex-1]
+	n.items = append(n.items[:bNodeIndex-1], n.items[bNodeIndex:]...)
+	aNode.items = append(aNode.items, pNodeItem)
+
+	aNode.items = append(aNode.items, bNode.items...)
+	n.childNodes = append(n.childNodes[:bNodeIndex], n.childNodes[bNodeIndex+1:]...)
+	if !aNode.isLeaf() {
+		aNode.childNodes = append(aNode.childNodes, bNode.childNodes...)
+	}
+	n.writeNodes(aNode, n)
+	n.dal.deleteNode(bNode.pageNum)
+	return nil
+}
+
+
+func (n *Node) rebalanceRemove(unbalancedNode *Node, unbalancedNodeIndex int) error {
+	pNode := n
+
+	if unbalancedNodeIndex != 0 {
+		leftNode, err := n.getNode(pNode.childNodes[unbalancedNodeIndex-1])
+		if err != nil {
+			return err
+		}
+		if leftNode.canSpareAnElement() {
+			rotateRight(leftNode, pNode, unbalancedNode, unbalancedNodeIndex)
+			n.writeNodes(leftNode, pNode, unbalancedNode)
+			return nil
+		}
+	}
+
+	if unbalancedNodeIndex != len(pNode.childNodes)-1 {
+		rightNode, err := n.getNode(pNode.childNodes[unbalancedNodeIndex+1])
+		if err != nil {
+			return err
+		}
+		if rightNode.canSpareAnElement() {
+			rotateLeft(unbalancedNode, pNode, rightNode, unbalancedNodeIndex)
+			n.writeNodes(unbalancedNode, pNode, rightNode)
+			return nil
+		}
+	}
+	if unbalancedNodeIndex == 0 {
+		rightNode, err := n.getNode(n.childNodes[unbalancedNodeIndex+1])
+		if err != nil {
+			return err
+		}
+
+		return pNode.merge(rightNode, unbalancedNodeIndex+1)
+	}
+
+	return pNode.merge(unbalancedNode, unbalancedNodeIndex)
+}
