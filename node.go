@@ -11,8 +11,7 @@ type Item struct {
 }
 
 type Node struct {
-	*dal
-
+	tx *Tx
 	pageNum    pageNumber
 	items      []*Item
 	childNodes []pageNumber
@@ -49,8 +48,7 @@ func (n *Node) isLeaf() bool {
 }
 
 func (n *Node) writeNode(node *Node) *Node {
-	node, _ = n.dal.writeNode(node)
-	return node
+	return n.tx.writeNode(node)
 }
 
 func (n *Node) writeNodes(nodes ...*Node) {
@@ -60,15 +58,15 @@ func (n *Node) writeNodes(nodes ...*Node) {
 }
 
 func (n *Node) getNode(pageNum pageNumber) (*Node, error) {
-	return n.dal.getNode(pageNum)
+	return n.tx.getNode(pageNum)
 }
 
 func (n *Node) isOverPopulated() bool {
-	return n.dal.isOverPopulated(n)
+	return n.tx.db.isOverPopulated(n)
 }
 
 func (n *Node) canSpareAnElement() bool {
-	splitIndex := n.dal.getSplitIndex(n)
+	splitIndex := n.tx.db.getSplitIndex(n)
 	if splitIndex == -1 {
 		return false
 	}
@@ -76,7 +74,7 @@ func (n *Node) canSpareAnElement() bool {
 }
 
 func (n *Node) isUnderPopulated() bool {
-	return n.dal.isUnderPopulated(n)
+	return n.tx.db.isUnderPopulated(n)
 }
 
 func (n *Node) serialize(buf []byte) []byte {
@@ -245,15 +243,15 @@ func (n *Node) addItem(item *Item, insertionIndex int) int {
 
 
 func (n *Node) split(nodeToSplit *Node, nodeToSplitIndex int) {
-	splitIndex := nodeToSplit.dal.getSplitIndex(nodeToSplit)
+	splitIndex := nodeToSplit.tx.db.getSplitIndex(nodeToSplit)
 	middleItem := nodeToSplit.items[splitIndex]
 	var newNode *Node
 
 	if nodeToSplit.isLeaf() {
-		newNode = n.writeNode(n.dal.newNode(nodeToSplit.items[splitIndex+1:], []pageNumber{}))
+		newNode = n.writeNode(n.tx.newNode(nodeToSplit.items[splitIndex+1:], []pageNumber{}))
 		nodeToSplit.items = nodeToSplit.items[:splitIndex]
 	} else {
-		newNode = n.writeNode(n.dal.newNode(nodeToSplit.items[splitIndex+1:], nodeToSplit.childNodes[splitIndex+1:]))
+		newNode = n.writeNode(n.tx.newNode(nodeToSplit.items[splitIndex+1:], nodeToSplit.childNodes[splitIndex+1:]))
 		nodeToSplit.items = nodeToSplit.items[:splitIndex]
 		nodeToSplit.childNodes = nodeToSplit.childNodes[:splitIndex+1]
 	}
@@ -353,7 +351,7 @@ func (n *Node) merge(bNode *Node, bNodeIndex int) error {
 		aNode.childNodes = append(aNode.childNodes, bNode.childNodes...)
 	}
 	n.writeNodes(aNode, n)
-	n.dal.deleteNode(bNode.pageNum)
+	n.tx.db.deleteNode(bNode.pageNum)
 	return nil
 }
 

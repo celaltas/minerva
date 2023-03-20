@@ -164,24 +164,16 @@ func (d *dal) readFreelist() (*freeList, error) {
 }
 
 
-func (d *dal) newNode(items []*Item, childNodes []pageNumber) *Node {
-	node := NewNode()
-	node.items = items
-	node.childNodes = childNodes
-	node.pageNum = d.getNextPage()
-	node.dal = d
-	return node
-}
 
-func (d *dal) getNode(number pageNumber) (*Node, error) {
-	p, err := d.readPage(number)
+
+func (d *dal) getNode(pageNum pageNumber) (*Node, error) {
+	p, err := d.readPage(pageNum)
 	if err != nil {
 		return nil, err
 	}
 	node := NewNode()
 	node.deserialize(p.data)
-	node.pageNum = number
-	node.dal=d
+	node.pageNum = pageNum
 	return node, nil
 }
 

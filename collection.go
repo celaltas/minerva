@@ -8,7 +8,7 @@ import (
 type Collection struct {
 	name []byte
 	root pageNumber
-	dal  *dal
+	tx *Tx
 }
 
 func NewCollection(name []byte, root pageNumber) *Collection {
@@ -20,7 +20,7 @@ func NewCollection(name []byte, root pageNumber) *Collection {
 }
 
 func (c *Collection) getNodes(indexes []int) ([]*Node, error) {
-	root, err := c.dal.getNode(c.root)
+	root, err := c.tx.getNode(c.root)
 	if err != nil {
 		return nil, err
 	}
@@ -28,7 +28,7 @@ func (c *Collection) getNodes(indexes []int) ([]*Node, error) {
 	nodes := []*Node{root}
 	child := root
 	for i := 1; i < len(indexes); i++ {
-		child, err = c.dal.getNode(child.childNodes[indexes[i]])
+		child, err = c.tx.getNode(child.childNodes[indexes[i]])
 		if err != nil {
 			return nil, err
 		}
@@ -38,7 +38,7 @@ func (c *Collection) getNodes(indexes []int) ([]*Node, error) {
 }
 
 func (c *Collection) Find(key []byte) (*Item, error) {
-	node, err := c.dal.getNode(c.root)
+	node, err := c.tx.getNode(c.root)
 	if err != nil {
 		return nil, err
 	}
@@ -56,19 +56,22 @@ func (c *Collection) Find(key []byte) (*Item, error) {
 }
 
 func (c *Collection) Put(key []byte, value []byte) error {
+	if !c.tx.write {
+		return writeInsideReadTxErr
+	}
 	i := NewItem(key, value)
 
 	var root *Node
 	var err error
 	if c.root == 0 {
-		root, err = c.dal.writeNode(c.dal.newNode([]*Item{i}, []pageNumber{}))
+		root = c.tx.writeNode(c.tx.newNode([]*Item{i}, []pageNumber{}))
 		if err != nil {
 			return nil
 		}
 		c.root = root.pageNum
 		return nil
 	} else {
-		root, err = c.dal.getNode(c.root)
+		root, err = c.tx.getNode(c.root)
 		if err != nil {
 			return err
 		}
@@ -102,9 +105,9 @@ func (c *Collection) Put(key []byte, value []byte) error {
 
 	rootNode := ancestors[0]
 	if rootNode.isOverPopulated() {
-		newRoot := c.dal.newNode([]*Item{}, []pageNumber{rootNode.pageNum})
+		newRoot := c.tx.newNode([]*Item{}, []pageNumber{rootNode.pageNum})
 		newRoot.split(rootNode, 0)
-		newRoot, err = c.dal.writeNode(newRoot)
+		newRoot = c.tx.writeNode(newRoot)
 		if err != nil {
 			return err
 		}
@@ -117,7 +120,10 @@ func (c *Collection) Put(key []byte, value []byte) error {
 
 
 func (c *Collection) Remove(key []byte) error {
-	rootNode, err := c.dal.getNode(c.root)
+	if !c.tx.write {
+		return writeInsideReadTxErr
+	}
+	rootNode, err := c.tx.getNode(c.root)
 	if err != nil {
 		return err
 	}
