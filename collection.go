@@ -2,13 +2,20 @@ package main
 
 import (
 	"bytes"
+	"encoding/binary"
 	"fmt"
 )
 
+const (
+	collectionSize = 16
+	counterSize    = 4
+)
+
 type Collection struct {
-	name []byte
-	root pageNumber
-	tx *Tx
+	name    []byte
+	root    pageNumber
+	tx      *Tx
+	counter uint64
 }
 
 func NewCollection(name []byte, root pageNumber) *Collection {
@@ -17,6 +24,9 @@ func NewCollection(name []byte, root pageNumber) *Collection {
 		root: root,
 	}
 
+}
+func newEmptyCollection() *Collection {
+	return &Collection{}
 }
 
 func (c *Collection) getNodes(indexes []int) ([]*Node, error) {
@@ -118,7 +128,6 @@ func (c *Collection) Put(key []byte, value []byte) error {
 	return nil
 }
 
-
 func (c *Collection) Remove(key []byte) error {
 	if !c.tx.write {
 		return writeInsideReadTxErr
@@ -169,4 +178,36 @@ func (c *Collection) Remove(key []byte) error {
 	}
 
 	return nil
+}
+func (c *Collection) ID() uint64 {
+	if !c.tx.write {
+		return 0
+	}
+
+	id := c.counter
+	c.counter += 1
+	return id
+}
+
+func (c *Collection) serialize() *Item {
+	b := make([]byte, collectionSize)
+	leftPos := 0
+	binary.LittleEndian.PutUint64(b[leftPos:], uint64(c.root))
+	leftPos += pageNumberSize
+	binary.LittleEndian.PutUint64(b[leftPos:], c.counter)
+	leftPos += counterSize
+	return NewItem(c.name, b)
+}
+
+func (c *Collection) deserialize(item *Item) {
+	c.name = item.key
+
+	if len(item.value) != 0 {
+		leftPos := 0
+		c.root = pageNumber(binary.LittleEndian.Uint64(item.value[leftPos:]))
+		leftPos += pageNumberSize
+
+		c.counter = binary.LittleEndian.Uint64(item.value[leftPos:])
+		leftPos += pageNumberSize
+	}
 }
